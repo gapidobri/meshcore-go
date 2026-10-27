@@ -1,0 +1,6 @@
+.vscode
+
+testdata/*.bin
+*.bin
+*.elf
+*.test

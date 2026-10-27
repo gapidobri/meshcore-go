@@ -1,0 +1,6 @@
+filippo.io/edwards25519 v1.2.0 h1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=
+filippo.io/edwards25519 v1.2.0/go.mod h1:xzAOLCNug/yB62zG1bQ8uziwrIqIuxhctzJT18Q77mc=
+github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 h1:El6M4kTTCOh6aBiKaUGG7oYTSPP8MxqL4YI3kZKwcP4=
+github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510/go.mod h1:pupxD2MaaD3pAXIBCelhxNneeOaAeabZDe5s4K6zSpQ=
+tinygo.org/x/drivers v0.36.0 h1:F0x342A6GWqh6abtCa57uAxCyz/b9MbGzvIVvIf+gpE=
+tinygo.org/x/drivers v0.36.0/go.mod h1:DQgKyHkB4G6IEOKVTAjApbKnWGwESN91EVJO+nMOE9Y=
