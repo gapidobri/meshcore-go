@@ -1,6 +1,7 @@
 package meshcore
 
 import (
+	"bytes"
 	"crypto/sha512"
 
 	"filippo.io/edwards25519"
@@ -11,6 +12,12 @@ import (
 // secret: the clamped scalar (32 bytes) followed by the nonce prefix
 // (32 bytes), i.e. clamp(SHA512(seed)). Go's crypto/ed25519 cannot sign with
 // that format, so signing and key exchange are implemented here directly.
+//
+// Verification is done here too, so crypto/ed25519 (and its own copy of
+// edwards25519) is not linked in. Point.ScalarBaseMult and
+// VarTimeDoubleScalarBaseMult are avoided on purpose: they fill precomputed
+// basepoint tables (~31 KB and ~8 KB) that end up in static RAM, which on a
+// microcontroller costs far more than the slower variable-base ScalarMult.
 
 // expandSeed returns the orlp private key for a 32-byte seed.
 func expandSeed(prv *[PrvKeySize]byte, seed []byte) {
@@ -29,8 +36,13 @@ func secretScalar(prv *[PrvKeySize]byte) *edwards25519.Scalar {
 	return s
 }
 
+// scalarBaseMult is Point.ScalarBaseMult without the precomputed table.
+func scalarBaseMult(s *edwards25519.Scalar) *edwards25519.Point {
+	return new(edwards25519.Point).ScalarMult(s, edwards25519.NewGeneratorPoint())
+}
+
 func derivePub(pub *[PubKeySize]byte, prv *[PrvKeySize]byte) {
-	A := new(edwards25519.Point).ScalarBaseMult(secretScalar(prv))
+	A := scalarBaseMult(secretScalar(prv))
 	copy(pub[:], A.Bytes())
 }
 
@@ -44,7 +56,7 @@ func orlpSign(sig *[SignatureSize]byte, msg []byte, pub *[PubKeySize]byte, prv *
 	h.Sum(digest[:0])
 	r, _ := edwards25519.NewScalar().SetUniformBytes(digest[:])
 
-	R := new(edwards25519.Point).ScalarBaseMult(r)
+	R := scalarBaseMult(r)
 	copy(sig[:32], R.Bytes())
 
 	h.Reset()
@@ -56,6 +68,33 @@ func orlpSign(sig *[SignatureSize]byte, msg []byte, pub *[PubKeySize]byte, prv *
 
 	S := edwards25519.NewScalar().MultiplyAdd(k, secretScalar(prv), r)
 	copy(sig[32:], S.Bytes())
+}
+
+// verify is crypto/ed25519.Verify: it checks [S]B == R + [k]A with
+// k = SHA512(R || A || msg), rejecting non-canonical S.
+func verify(pub *[PubKeySize]byte, msg []byte, sig []byte) bool {
+	A, err := new(edwards25519.Point).SetBytes(pub[:])
+	if err != nil {
+		return false
+	}
+	S, err := edwards25519.NewScalar().SetCanonicalBytes(sig[32:])
+	if err != nil {
+		return false
+	}
+
+	var digest [64]byte
+	h := sha512.New()
+	h.Write(sig[:32])
+	h.Write(pub[:])
+	h.Write(msg)
+	h.Sum(digest[:0])
+	k, _ := edwards25519.NewScalar().SetUniformBytes(digest[:])
+
+	// R = [S]B - [k]A
+	kA := new(edwards25519.Point).ScalarMult(k, A)
+	R := scalarBaseMult(S)
+	R.Subtract(R, kA)
+	return bytes.Equal(R.Bytes(), sig[:32])
 }
 
 // orlpKeyExchange is ed25519_key_exchange() from orlp/ed25519: the Ed25519

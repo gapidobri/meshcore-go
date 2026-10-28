@@ -2,7 +2,6 @@ package meshcore
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"errors"
 )
 
@@ -35,7 +34,7 @@ func (id *Identity) Verify(sig, msg []byte) bool {
 	if len(sig) != SignatureSize {
 		return false
 	}
-	return ed25519.Verify(id.PubKey[:], msg, sig)
+	return verify(&id.PubKey, msg, sig)
 }
 
 // Matches reports whether both identities have the same public key.
