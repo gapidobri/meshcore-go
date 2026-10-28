@@ -400,6 +400,14 @@ func (r *Radio) TriggerNoiseFloorCalibrate(threshold int) {
 	}
 }
 
+// Sleep puts the chip into cold-start sleep, its lowest-power mode (about
+// 160 nA), for battery nodes between transmissions. The configuration is
+// lost: call Begin before using the radio again.
+func (r *Radio) Sleep() {
+	r.dev.ExecSetCommand(sx126x.SX126X_CMD_SET_SLEEP, []uint8{sx126x.SX126X_SLEEP_START_COLD | sx126x.SX126X_SLEEP_RTC_OFF})
+	r.state = stateIdle
+}
+
 func (r *Radio) SetCADEnabled(bool) {}
 
 func (r *Radio) ResetAGC() {
