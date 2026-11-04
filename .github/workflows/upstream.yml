@@ -1,0 +1,87 @@
+name: upstream-release
+# Detects a new upstream MeshCore release, regenerates the golden vectors from
+# it, runs the tests, and opens a PR (draft if the tests fail).
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  UPSTREAM: meshcore-dev/meshcore
+  # Upstream publishes companion-, repeater- and room-server- tags per release.
+  # They share a version, so tracking one is enough.
+  TAG_PREFIX: companion-v
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Find latest upstream release
+        id: up
+        run: |
+          tag=$(gh api "repos/$UPSTREAM/releases" --paginate \
+            --jq "[.[] | select(.draft|not) | select(.prerelease|not) | select(.tag_name|startswith(\"$TAG_PREFIX\"))][0].tag_name" | head -n1)
+          [ -n "$tag" ] || { echo "no release found"; exit 1; }
+          sha=$(gh api "repos/$UPSTREAM/commits/$tag" --jq .sha)
+          cur=$(sed -nE 's/^MESHCORE_REV=\$\{MESHCORE_REV:-([0-9a-f]{40})\}$/\1/p' tools/golden/gen.sh)
+          echo "tag=$tag sha=$sha pinned=$cur"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$sha" = "$cur" ]; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Skip if a PR for this release already exists
+        id: dup
+        if: steps.up.outputs.changed == 'true'
+        run: |
+          n=$(gh pr list --state all --head "upstream/${{ steps.up.outputs.tag }}" --json number --jq length)
+          echo "exists=$([ "$n" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate golden vectors
+        if: steps.up.outputs.changed == 'true' && steps.dup.outputs.exists == 'false'
+        run: |
+          sed -i -E "s/^(MESHCORE_REV=\\$\\{MESHCORE_REV:-)[0-9a-f]{40}/\1${{ steps.up.outputs.sha }}/" tools/golden/gen.sh
+          tools/golden/gen.sh "$RUNNER_TEMP/golden"
+
+      - name: Run tests
+        id: test
+        if: steps.up.outputs.changed == 'true' && steps.dup.outputs.exists == 'false'
+        continue-on-error: true
+        run: go test ./... 2>&1 | tee "$RUNNER_TEMP/test.log"; exit "${PIPESTATUS[0]}"
+        shell: bash
+
+      - name: Open PR
+        if: steps.up.outputs.changed == 'true' && steps.dup.outputs.exists == 'false'
+        shell: bash
+        run: |
+          tag=${{ steps.up.outputs.tag }}
+          branch=upstream/$tag
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add tools/golden/gen.sh testdata/golden.json
+          git commit -m "Bump upstream MeshCore to $tag"
+          git push origin "$branch"
+          if [ "${{ steps.test.outcome }}" = success ]; then
+            status="Tests **passed** against upstream \`$tag\`."; draft=""
+          else
+            status="Tests **failed** against upstream \`$tag\` - upstream behavior changed. Output:
+
+          \`\`\`
+          $(tail -n 60 "$RUNNER_TEMP/test.log")
+          \`\`\`"; draft="--draft"
+          fi
+          gh pr create $draft --base "${{ github.event.repository.default_branch }}" --head "$branch" \
+            --title "Bump upstream MeshCore to $tag" \
+            --body "Pins [$UPSTREAM@${{ steps.up.outputs.sha }}](https://github.com/$UPSTREAM/commit/${{ steps.up.outputs.sha }}) and regenerates \`testdata/golden.json\`.
+
+          $status"

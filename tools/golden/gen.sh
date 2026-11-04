@@ -8,7 +8,7 @@
 set -eu
 
 MESHCORE_REPO=https://github.com/meshcore-dev/meshcore
-MESHCORE_REV=81dbae592ffad40b4212bc0b37e82b38da08f4bc
+MESHCORE_REV=${MESHCORE_REV:-81dbae592ffad40b4212bc0b37e82b38da08f4bc}
 CRYPTO_REPO=https://github.com/rweather/arduinolibs
 CRYPTO_REV=37a76b8f7516568e1c575b6dc9268da1ccaac6b6
 
