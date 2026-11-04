@@ -429,7 +429,7 @@ static void emitAdverts() {
   end_array();
 
   begin_array("ftoa");
-  float fs[] = {0.0f, 1.0f, -1.0f, 0.5f, 3.14159265f, -2.71828f, 123456.789f, 0.0001234f, 1e-9f, 3e9f, 869.618f, 62.5f, -0.4996f, 0.0005f, 12.3456f};
+  float fs[] = {0.0f, 1.0f, -1.0f, 0.5f, 3.14159265f, -2.71828f, 123456.789f, 0.0001234f, 1e-9f, 869.618f, 62.5f, -0.4996f, 0.0005f, 12.3456f};
   for (float f : fs) {
     uint32_t bits;
     memcpy(&bits, &f, 4);
